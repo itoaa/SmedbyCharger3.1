@@ -40,7 +40,7 @@
 /* Create reference to the handle for the serial port. */
 extern xComPortHandle xSerialPort;
 
-static void TaskBlinkRedLED(void *pvParameters); // Main Arduino Mega 2560, Freetronics EtherMega (Red) LED Blink
+static void TaskCharger(void *pvParameters);  // Main Charger task
 
 static void TaskSerialSend(void *pvParameters);
 /*-----------------------------------------------------------*/
@@ -63,13 +63,17 @@ int main(void) __attribute__ ((OS_main));
 
 int main(void)
 {
-    // turn on the serial port for debugging or for other USART reasons.
+	// Set Analog Ref to external
+	ADMUX&=~(1<<REFS0);		// Clear bit
+	ADMUX&=~(1<<REFS1);		// Clear bit
+
+	// turn on the serial port for debugging or for other USART reasons.
 	xSerialPort = xSerialPortInitMinimal( USART0, 38400, portSERIAL_BUFFER_TX, portSERIAL_BUFFER_RX); //  serial port: WantedBaud, TxQueueLength, RxQueueLength (8n1)
 
 //	avrSerialxPrint_P(&xSerialPort, PSTR("\r\n\n\nHello World!\r\n")); // Ok, so we're alive...
 
     xTaskCreate(
-		TaskBlinkRedLED
+		TaskCharger
 		,  (const portCHAR *)"RedLED" // Main Arduino Mega 2560, Freetronics EtherMega (Red) LED Blink
 		,  256				// Tested 9 free @ 208
 		,  NULL
@@ -98,7 +102,7 @@ int main(void)
 /*-----------------------------------------------------------*/
 
 
-static void TaskBlinkRedLED(void *pvParameters) // Main Red LED Flash
+static void TaskCharger(void *pvParameters) // Main charger task
 {
     (void) pvParameters;
     TickType_t xLastWakeTime;
@@ -107,24 +111,36 @@ static void TaskBlinkRedLED(void *pvParameters) // Main Red LED Flash
 	point on xLastWakeTime is managed automatically by the vTaskDelayUntil()
 	API function. */
 	xLastWakeTime = xTaskGetTickCount();
+	DDRD |= _BV(DDB4);
 
-//	int8_t i  = 6;
-//	uint8_t j = 0;
-
-
-//	DDRB |= _BV(DDB7);
 
     for(;;)
     {
+    	PORTD |=  _BV(PORTD4);       // main (red IO_B7) LED on. EtherMega LED on
+    	vTaskDelayUntil( &xLastWakeTime, ( 1100 / portTICK_PERIOD_MS ) );
 
- //   	PORTB |=  _BV(PORTB7);       // main (red IO_B7) LED on. EtherMega LED on
-//		vTaskDelayUntil( &xLastWakeTime, ( 1100 / portTICK_PERIOD_MS ) );
+    	PORTD &= ~_BV(PORTD4);       // main (red IO_B7) LED off. EtherMega LED off
+    	vTaskDelayUntil( &xLastWakeTime, ( 1100 / portTICK_PERIOD_MS ) );
+
+    	if (	Get_var(ChargerState) == 1)                                   // While charge status = Monitor
+		{
+			Set_var(ChargerInVolt,InVolt.readVolt());
+			Set_var(ChargerOutVolt,OutVolt.readVolt());
+			Set_var(ChargerOutAmp,OutCurrent.readCurrent());
+
+			// Monitor
+		}
+		if (	Get_var(ChargerState) == 2)                                  // While charge status = FastCharge
+		{
+			// FastCharge
+		}
+		if (	Get_var(ChargerState) == 3)                                  // While charge status = Trickle Charge
+		{
+			// Trickle charge
+		}
 
 
-	//	PORTB &= ~_BV(PORTB7);       // main (red IO_B7) LED off. EtherMega LED off
 		vTaskDelayUntil( &xLastWakeTime, ( 1100 / portTICK_PERIOD_MS ) );
-
-	//	xSerialxPrintf_P(&xSerialPort, PSTR("Red  : Stack High Water Mark, red task: %u\r\n"), uxTaskGetStackHighWaterMark( NULL ) ); // Check stack Margin.
 
     }
 
